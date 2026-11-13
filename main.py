@@ -23,13 +23,18 @@ WATCHLIST = [
 
 # ================= إدارة قاعدة البيانات =================
 def load_db():
+    data = {}
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
             try:
-                return json.load(f)
+                data = json.load(f)
             except json.JSONDecodeError:
-                return {"last_update_id": 0, "users": {}}
-    return {"last_update_id": 0, "users": {}}
+                data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("last_update_id", 0)
+    data.setdefault("users", {})
+    return data
 
 def save_db(db):
     with open(DB_FILE, "w", encoding="utf-8") as f:
@@ -55,7 +60,6 @@ def init_user(db, chat_id):
         db["users"][uid]["last_trade_date"] = today_str
         db["users"][uid]["report_sent_today"] = False
     return db["users"][uid]
-
 # ================= دوال تيليجرام المباشرة (REST API) =================
 def tg_request(method, payload=None, files=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
