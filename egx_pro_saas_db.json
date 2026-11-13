@@ -1,4 +1,16 @@
 {
-    "last_update_id": 0,
-    "users": {}
+    "last_update_id": 879650120,
+    "users": {
+        "5464602559": {
+            "balance": 10000.0,
+            "available_cash": 10000.0,
+            "risk_pct": 0.015,
+            "max_open_trades": 3,
+            "daily_loss": 0.0,
+            "last_trade_date": "2026-11-13",
+            "report_sent_today": false,
+            "active_trades": {},
+            "history": []
+        }
+    }
 }
