@@ -261,9 +261,11 @@ def analyze_stock(ticker):
 
 # ================= التشغيل الرئيسي =================
 def main():
+    tg_request("deleteWebhook")  # مسح أي ربط قديم يعطل قراءة الرسائل
     db = load_db()
     if ADMIN_CHAT_ID:
         init_user(db, ADMIN_CHAT_ID)
+        send_msg(ADMIN_CHAT_ID, "🟢 تم الاتصال بنجاح! البوت جاهز، ابعت /scan لتجربة الفحص الآن.")
 
     # 1. قراءة وتنفيذ أي أوامر أو أزرار ضغطت عليها مسبقاً
     force_scan_users = process_telegram_updates(db)
