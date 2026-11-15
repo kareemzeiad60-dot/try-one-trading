@@ -2,9 +2,13 @@ name: EGX Smart SaaS Bot
 
 on:
   schedule:
-    # يعمل كل 20 دقيقة خلال أيام التداول (الأحد للخميس) من 10:00 ص إلى 2:40 م بتوقيت القاهرة (7:00 إلى 11:40 UTC)
-    - cron: '*/20 7-11 * * 0-4'
+    # فحص الأوامر طوال اليوم؛ main.py يحدّث السوق أثناء الجلسة ويتوقع مرة يومياً بعد الإغلاق.
+    - cron: '*/20 * * * *'
   workflow_dispatch: # يتيح لك تشغيله يدوياً في أي وقت من تبويب Actions
+
+concurrency:
+  group: egx-smart-saas-bot
+  cancel-in-progress: false
 
 permissions:
   contents: write # صلاحية لحفظ تحديثات المحفظة في ملف JSON تلقائياً
@@ -35,4 +39,10 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "EGX SaaS Bot"
           git add egx_pro_saas_db.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update portfolio state" && git push)
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update portfolio state"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
