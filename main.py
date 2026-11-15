@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 import pandas as pd
@@ -437,11 +437,25 @@ def format_pattern_forecast(forecast):
     }[forecast["direction"]]
     outcome_name = "هبطت" if forecast["direction"] == "down" else "صعدت"
     outcome_rate = forecast["down_rate"] if forecast["direction"] == "down" else forecast["up_rate"]
+    start_date, end_date = forecast_session_window(
+        forecast["data_date"],
+        forecast["horizon"],
+    )
     return (
-        f"{direction} خلال {forecast['horizon']} جلسات؛ "
+        f"{direction} خلال {forecast['horizon']} جلسات "
+        f"(تقريباً من {start_date} إلى {end_date})؛ "
         f"{outcome_name} {outcome_rate:.0%} من {forecast['samples']} حالات مشابهة، "
         f"ومتوسط تغيرها {forecast['mean_return'] * 100:+.2f}%"
     )
+
+def forecast_session_window(data_date, horizon=FORECAST_HORIZON):
+    session_date = datetime.strptime(data_date, "%Y-%m-%d").date()
+    session_dates = []
+    while len(session_dates) < horizon:
+        session_date += timedelta(days=1)
+        if session_date.weekday() in [6, 0, 1, 2, 3]:
+            session_dates.append(session_date.strftime("%Y-%m-%d"))
+    return session_dates[0], session_dates[-1]
 
 def send_forecast_summary(user, chat_id, results):
     forecasts = [result for result in results if result.get("forecast")]
@@ -459,25 +473,24 @@ def send_forecast_summary(user, chat_id, results):
     )[:3]
     data_date = max(result["forecast"]["data_date"] for result in forecasts)
     lines = [
-        f"🔎 *توقع EGX الاحتمالي للخمس جلسات القادمة*",
+        "🔎 *حالة EGX الآن والتوقع للخمس جلسات القادمة*",
         f"آخر تاريخ بيانات: {data_date}",
+        "نافذة التوقع تقريبية وتتجاهل العطلات الرسمية؛ لا يمكن تحديد يوم بعينه.",
     ]
 
     for result in up:
         forecast = result["forecast"]
         lines.append(
-            f"🟢 مرشح صاعد `{result['symbol']}` — "
-            f"صعود {forecast['up_rate']:.0%} من {forecast['samples']} حالات مشابهة، "
-            f"ومتوسط التغير {forecast['mean_return'] * 100:+.2f}% "
-            f"(بيانات {forecast['data_date']})"
+            f"🟢 `{result['symbol']}` — الحالة حسب EGX: {result['current_status']}؛ "
+            f"آخر سعر {result['price']:,.3f} ج.م. التوقع: "
+            f"{format_pattern_forecast(forecast)}"
         )
     for result in down:
         forecast = result["forecast"]
         lines.append(
-            f"🔴 مرشح هابط `{result['symbol']}` — "
-            f"هبوط {forecast['down_rate']:.0%} من {forecast['samples']} حالات مشابهة، "
-            f"ومتوسط التغير {forecast['mean_return'] * 100:+.2f}% "
-            f"(بيانات {forecast['data_date']})"
+            f"🔴 `{result['symbol']}` — الحالة حسب EGX: {result['current_status']}؛ "
+            f"آخر سعر {result['price']:,.3f} ج.م. التوقع: "
+            f"{format_pattern_forecast(forecast)}"
         )
     if not up and not down:
         lines.append("لا تظهر أنماط تاريخية مشابهة ذات اتجاه واضح حالياً.")
@@ -485,7 +498,7 @@ def send_forecast_summary(user, chat_id, results):
 
     send_signal_once(
         user,
-        "FORECAST_SUMMARY",
+        "FORECAST_STATUS_SUMMARY",
         data_date,
         chat_id,
         "\n".join(lines),
@@ -509,6 +522,24 @@ def analyze_stock(ticker, quote, history_rows):
     if pd.isna(rsi):
         print(f"EGX indicators for {ticker} are incomplete; skipping.")
         return None
+
+    if price > sma20 and price > sma50:
+        trend_status = "السعر فوق متوسطي 20 و50 جلسة"
+    elif price < sma20 and price < sma50:
+        trend_status = "السعر تحت متوسطي 20 و50 جلسة"
+    else:
+        trend_status = "السعر بين المتوسطات وإشارات الاتجاه مختلطة"
+    if rsi >= 70:
+        rsi_status = f"RSI {rsi:.1f} في منطقة تشبع شرائي"
+    elif rsi <= 30:
+        rsi_status = f"RSI {rsi:.1f} في منطقة تشبع بيعي"
+    else:
+        rsi_status = f"RSI {rsi:.1f} في النطاق المعتاد"
+    change_pct = ((price / prev_price) - 1) * 100 if prev_price > 0 else 0.0
+    current_status = (
+        f"{trend_status}؛ {rsi_status}؛ "
+        f"التغير عن الجلسة السابقة {change_pct:+.2f}%"
+    )
 
     score, reasons = 0, []
     if price > sma20 > sma50:
@@ -534,6 +565,7 @@ def analyze_stock(ticker, quote, history_rows):
         "symbol": ticker.replace(".CA", ""),
         "price": price,
         "data_date": last["Date"].strftime("%Y-%m-%d"),
+        "current_status": current_status,
         "score": min(score, 100),
         "reasons": reasons,
         "sell_reasons": sell_reasons
@@ -568,10 +600,22 @@ def main():
         save_db(db)
         return
 
+    needs_summary_upgrade = any(
+        user.get("last_signals", {}).get("FORECAST_SUMMARY")
+        and not user.get("last_signals", {}).get("FORECAST_STATUS_SUMMARY")
+        for user in db["users"].values()
+    )
+    summary_upgrade_due = (
+        needs_summary_upgrade
+        and db.get("last_forecast_summary_upgrade_attempt_date") != today_str
+    )
     forecast_due = (
         not is_market_session
         and now.hour >= 15
-        and db.get("last_forecast_attempt_date") != today_str
+        and (
+            db.get("last_forecast_attempt_date") != today_str
+            or summary_upgrade_due
+        )
     )
     if not (is_market_session or forecast_due or force_scan_users):
         save_db(db)
@@ -580,6 +624,8 @@ def main():
 
     if forecast_due:
         db["last_forecast_attempt_date"] = today_str
+        if summary_upgrade_due:
+            db["last_forecast_summary_upgrade_attempt_date"] = today_str
 
     # 2. تحميل بيانات EGX وتحليل الأسهم
     try:
@@ -651,8 +697,8 @@ def main():
                         uid,
                         f"🔴 *إشارة فنية للمراجعة — بيع محتمل*\n"
                         f"• السهم: `{sym}` | السعر: {price} ج.م\n"
-                        f"• آخر جلسة بيانات EGX: {res['data_date']}\n"
-                        f"• النظرة التاريخية: {format_pattern_forecast(res['forecast'])}\n"
+                        f"• الحالة حسب EGX بتاريخ {res['data_date']}: {res['current_status']}\n"
+                        f"• التوقع والتوقيت: {format_pattern_forecast(res['forecast'])}\n"
                         f"• السبب: {sell_reason}",
                         btns
                     )
@@ -689,8 +735,8 @@ def main():
                     uid,
                     f"🟢 *إشارة فنية محتملة للشراء — راجعها قبل القرار*\n"
                     f"• السهم: `{sym}` | الدرجة الفنية: {opp['score']}/100\n"
-                    f"• آخر جلسة بيانات EGX: {opp['data_date']}\n"
-                    f"• النظرة التاريخية: {format_pattern_forecast(opp['forecast'])}\n"
+                    f"• الحالة حسب EGX بتاريخ {opp['data_date']}: {opp['current_status']}\n"
+                    f"• التوقع والتوقيت: {format_pattern_forecast(opp['forecast'])}\n"
                     f"• السعر: {price} ج.م | الكمية: {shares} سهم ({cost:,.2f} ج.م)\n"
                     f"• الهدف: {tp} ج.م | الوقف: {sl} ج.م\n\n*الأسباب:*\n{reasons_txt}",
                     btns

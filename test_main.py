@@ -75,6 +75,7 @@ class EgxPriceDataTests(unittest.TestCase):
         self.assertEqual(result["price"], 559)
         self.assertEqual(result["score"], 75)
         self.assertEqual(result["data_date"], self.history[-1]["tradeDate"][:10])
+        self.assertIn("RSI", result["current_status"])
 
     def test_analysis_preserves_three_decimal_egp_prices(self):
         history = [
@@ -159,6 +160,12 @@ class EgxPriceDataTests(unittest.TestCase):
 
         self.assertIsNone(main.forecast_similar_patterns("TEST.CA", quote, self.history))
 
+    def test_forecast_window_skips_egx_weekend(self):
+        self.assertEqual(
+            main.forecast_session_window("2026-11-12", 5),
+            ("2026-11-15", "2026-11-19"),
+        )
+
 
 class SignalNotificationTests(unittest.TestCase):
     def test_successful_signal_is_not_repeated_for_the_same_session(self):
@@ -177,6 +184,33 @@ class SignalNotificationTests(unittest.TestCase):
 
         self.assertEqual(send.call_count, 2)
         self.assertNotIn("BUY:COMI", user["last_signals"])
+
+class ForecastNotificationTests(unittest.TestCase):
+    def test_summary_includes_current_state_and_estimated_forecast_window(self):
+        user = {"last_signals": {}}
+        result = {
+            "symbol": "COMI",
+            "price": 50.125,
+            "current_status": "السعر فوق متوسطي 20 و50 جلسة",
+            "forecast": {
+                "direction": "up",
+                "up_rate": 0.67,
+                "down_rate": 0.33,
+                "mean_return": 0.01,
+                "samples": 15,
+                "data_date": "2026-11-12",
+                "horizon": 5,
+            },
+        }
+        with patch("main.send_msg", return_value={"ok": True}) as send:
+            main.send_forecast_summary(user, "123", [result])
+
+        message = send.call_args.args[1]
+        self.assertIn("الحالة حسب EGX", message)
+        self.assertIn("50.125 ج.م", message)
+        self.assertIn("2026-11-15", message)
+        self.assertIn("2026-11-19", message)
+        self.assertIn("15 حالات مشابهة", message)
 
 class TelegramAccessControlTests(unittest.TestCase):
     def test_unauthorized_user_cannot_create_account_or_run_commands(self):
