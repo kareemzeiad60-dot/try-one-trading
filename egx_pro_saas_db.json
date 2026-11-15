@@ -1,5 +1,5 @@
 {
-    "last_update_id": 879650124,
+    "last_update_id": 879650126,
     "users": {
         "5464602559": {
             "balance": 10000.0,
@@ -12,9 +12,11 @@
             "active_trades": {},
             "history": [],
             "last_signals": {
-                "FORECAST_SUMMARY": "2026-11-12"
+                "FORECAST_SUMMARY": "2026-11-12",
+                "FORECAST_STATUS_SUMMARY": "2026-11-12"
             }
         }
     },
-    "last_forecast_attempt_date": "2026-11-15"
+    "last_forecast_attempt_date": "2026-11-15",
+    "last_forecast_summary_upgrade_attempt_date": "2026-11-15"
 }
