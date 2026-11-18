@@ -1,5 +1,5 @@
 {
-    "last_update_id": 879650137,
+    "last_update_id": 879650138,
     "users": {
         "5464602559": {
             "balance": 10000.0,
@@ -13,8 +13,8 @@
             "history": [],
             "last_signals": {
                 "FORECAST_SUMMARY": "2026-11-12",
-                "FORECAST_STATUS_SUMMARY": "2026-11-16",
-                "BUY:EAST": "2026-11-16"
+                "FORECAST_STATUS_SUMMARY": "2026-11-17",
+                "BUY:EAST": "2026-11-17"
             }
         }
     },
