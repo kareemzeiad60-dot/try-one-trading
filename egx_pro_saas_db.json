@@ -13,11 +13,11 @@
             "history": [],
             "last_signals": {
                 "FORECAST_SUMMARY": "2026-11-12",
-                "FORECAST_STATUS_SUMMARY": "2026-11-18",
+                "FORECAST_STATUS_SUMMARY": "2026-11-19",
                 "BUY:EAST": "2026-11-18"
             }
         }
     },
-    "last_forecast_attempt_date": "2026-11-19",
+    "last_forecast_attempt_date": "2026-11-20",
     "last_forecast_summary_upgrade_attempt_date": "2026-11-15"
 }
